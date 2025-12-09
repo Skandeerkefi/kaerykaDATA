@@ -57,10 +57,10 @@ router.get("/csgowinn", async (req, res) => {
       return res.json(csgoCache.data);
     }
 
-    const code = "mistertee";
+    const code = "kaeryka";
     const url = `https://api.csgowin.com/api/leaderboard/${code}`;
 
-    const response = await fetch(url, { headers: { "x-apikey": "108adfb76a" } });
+    const response = await fetch(url, { headers: { "x-apikey": "ae54f046cd" } });
     if (!response.ok) {
       const text = await response.text();
       throw new Error(text || "Failed to fetch CSGOWin leaderboard");
