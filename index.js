@@ -33,7 +33,7 @@ const allowedOrigins = [
 	"https://louiskhz.vercel.app",
 	"https://tacopoju-dun.vercel.app",
 	"https://www.tacopojurewards.com",
-	"https://www.tacopojurewards.com"
+	"https://kaeryka.vercel.app"
 ];
 
 app.use(
