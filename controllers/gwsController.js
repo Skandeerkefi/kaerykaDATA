@@ -42,10 +42,16 @@ exports.createGWS = async (req, res) => {
 
 exports.submitApplication = async (req, res) => {
 	const { id } = req.params;
-	const { name, discordName, depositProofImage } = req.body;
+	const {
+		name,
+		csgoName,
+		discordName,
+		depositProofImage,
+	} = req.body;
 	const userId = req.user.id;
+	const applicationName = csgoName || name;
 
-	if (!name || !discordName || !depositProofImage) {
+	if (!applicationName || !discordName || !depositProofImage) {
 		return res.status(400).json({ message: "All application fields are required." });
 	}
 
@@ -59,7 +65,7 @@ exports.submitApplication = async (req, res) => {
 		{
 			giveaway: id,
 			user: userId,
-			name,
+			name: applicationName,
 			discordName,
 			depositProofImage,
 			status: "pending",
@@ -97,6 +103,54 @@ exports.approveApplication = async (req, res) => {
 		return res.json({ message: "Application approved.", application });
 	} catch (error) {
 		return res.status(500).json({ message: "Failed to approve application." });
+	}
+};
+
+exports.declineApplication = async (req, res) => {
+	try {
+		const application = await GiveawayApplication.findById(req.params.applicationId);
+		if (!application) {
+			return res.status(404).json({ message: "Application not found." });
+		}
+
+		application.status = "rejected";
+		application.reviewedBy = req.user.id;
+		application.reviewedAt = new Date();
+		await application.save();
+
+		return res.json({ message: "Application declined.", application });
+	} catch (error) {
+		return res.status(500).json({ message: "Failed to decline application." });
+	}
+};
+
+exports.deleteApplication = async (req, res) => {
+	try {
+		const application = await GiveawayApplication.findByIdAndDelete(
+			req.params.applicationId
+		);
+		if (!application) {
+			return res.status(404).json({ message: "Application not found." });
+		}
+
+		return res.json({ message: "Application deleted.", applicationId: application._id });
+	} catch (error) {
+		return res.status(500).json({ message: "Failed to delete application." });
+	}
+};
+
+exports.deleteGWS = async (req, res) => {
+	try {
+		const giveaway = await GWS.findByIdAndDelete(req.params.id);
+		if (!giveaway) {
+			return res.status(404).json({ message: "Giveaway not found." });
+		}
+
+		await GiveawayApplication.deleteMany({ giveaway: req.params.id });
+
+		return res.json({ message: "Giveaway deleted.", giveawayId: giveaway._id });
+	} catch (error) {
+		return res.status(500).json({ message: "Failed to delete giveaway." });
 	}
 };
 
@@ -195,21 +249,33 @@ exports.getAllGWS = async (req, res) => {
 			.populate("participants", "csgoName");
 
 		let approvedApplications = [];
+		let currentUserApplications = [];
 		if (currentUserId) {
 			approvedApplications = await GiveawayApplication.find({
 				user: currentUserId,
 				status: "approved",
 			}).select("giveaway status");
+
+			currentUserApplications = await GiveawayApplication.find({
+				user: currentUserId,
+			}).select("giveaway status _id");
 		}
 
 		const approvedMap = new Map(
 			approvedApplications.map((application) => [application.giveaway.toString(), true])
+		);
+		const applicationStatusMap = new Map(
+			currentUserApplications.map((application) => [
+				application.giveaway.toString(),
+				{ status: application.status, applicationId: application._id.toString() },
+			])
 		);
 
 		res.json(
 			giveaways.map((giveaway) => ({
 				...giveaway.toObject(),
 				isApproved: approvedMap.get(giveaway._id.toString()) || false,
+				applicationStatus: applicationStatusMap.get(giveaway._id.toString()) || null,
 			}))
 		);
 	} catch (err) {

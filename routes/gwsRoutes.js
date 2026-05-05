@@ -4,6 +4,9 @@ const {
 	submitApplication,
 	getApplicationsByGiveaway,
 	approveApplication,
+	declineApplication,
+	deleteApplication,
+	deleteGWS,
 	joinGWS,
 	updateGWS,
 	drawWinner,
@@ -25,6 +28,19 @@ router.patch(
 	isAdmin,
 	approveApplication
 );
+router.patch(
+	"/applications/:applicationId/decline",
+	verifyToken,
+	isAdmin,
+	declineApplication
+);
+router.delete(
+	"/applications/:applicationId",
+	verifyToken,
+	isAdmin,
+	deleteApplication
+);
+router.delete("/:id", verifyToken, isAdmin, deleteGWS);
 router.patch("/:id", verifyToken, isAdmin, updateGWS);
 router.post("/:id/draw", verifyToken, isAdmin, drawWinner);
 
