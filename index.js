@@ -2,8 +2,6 @@ const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const mongoose = require("mongoose");
-const jwt = require("jsonwebtoken");
-const bcrypt = require("bcryptjs");
 
 dotenv.config();
 
@@ -54,7 +52,8 @@ app.use(
 	})
 );
 
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 // MongoDB Connection
 mongoose
@@ -62,8 +61,6 @@ mongoose
 	.then(() => console.log("✅ MongoDB connected"))
 	.catch((err) => console.error("❌ MongoDB connection error:", err));
 
-// Models
-const { User } = require("./models/User");
 const { SlotCall } = require("./models/SlotCall");
 
 // Middleware
@@ -71,47 +68,11 @@ const { verifyToken, isAdmin } = require("./middleware/auth");
 
 // Routes
 const slotCallRoutes = require("./routes/slotCallRoutes");
+const authRoutes = require("./routes/authRoutes");
+const gwsRoutes = require("./routes/gwsRoutes");
 
-// Auth Routes
-app.post("/api/auth/register", async (req, res) => {
-	const { kickUsername, password, confirmPassword } = req.body;
-
-	if (password !== confirmPassword) {
-		return res.status(400).json({ message: "Passwords do not match." });
-	}
-
-	const existing = await User.findOne({ kickUsername });
-	if (existing) {
-		return res.status(400).json({ message: "Username already exists." });
-	}
-
-	const hashed = await bcrypt.hash(password, 10);
-	const newUser = new User({ kickUsername, password: hashed });
-	await newUser.save();
-
-	res.status(201).json({ message: "User registered." });
-});
-
-app.post("/api/auth/login", async (req, res) => {
-	const { kickUsername, password } = req.body;
-
-	const user = await User.findOne({ kickUsername });
-	if (!user) return res.status(404).json({ message: "User not found." });
-
-	const match = await bcrypt.compare(password, user.password);
-	if (!match) return res.status(401).json({ message: "Invalid credentials." });
-
-	const token = jwt.sign(
-		{ id: user._id, role: user.role, kickUsername: user.kickUsername },
-		process.env.JWT_SECRET,
-		{ expiresIn: "7d" }
-	);
-
-	res.json({
-		token,
-		user: { id: user._id, kickUsername: user.kickUsername, role: user.role },
-	});
-});
+app.use("/api/auth", authRoutes);
+app.use("/api/gws", gwsRoutes);
 
 // Slot Call Routes
 app.use("/api/slot-calls", slotCallRoutes);

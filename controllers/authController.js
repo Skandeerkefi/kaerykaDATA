@@ -1,34 +1,67 @@
-const User = require("../models/User");
+const { User } = require("../models/User");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
 exports.register = async (req, res) => {
-	const { kickUsername, rainbetUsername, password, confirmPassword } = req.body;
+	const {
+		twitchUsername,
+		discordUsername,
+		csgoName,
+		password,
+		confirmPassword,
+	} = req.body;
+
+	if (!twitchUsername || !discordUsername || !csgoName || !password || !confirmPassword) {
+		return res.status(400).json({ message: "All signup fields are required." });
+	}
 
 	if (password !== confirmPassword) {
 		return res.status(400).json({ message: "Passwords do not match." });
 	}
 
-	// Check if kickUsername or rainbetUsername already exists
-	const existingKick = await User.findOne({ kickUsername });
-	if (existingKick)
-		return res.status(400).json({ message: "Kick username exists." });
+	const existingCsgo = await User.findOne({ csgoName });
+	if (existingCsgo)
+		return res.status(400).json({ message: "CSGO name already exists." });
 
-	const existingRainbet = await User.findOne({ rainbetUsername });
-	if (existingRainbet)
-		return res.status(400).json({ message: "Rainbet username exists." });
+	const existingTwitch = await User.findOne({ twitchUsername });
+	if (existingTwitch)
+		return res.status(400).json({ message: "Twitch username already exists." });
+
+	const existingDiscord = await User.findOne({ discordUsername });
+	if (existingDiscord)
+		return res.status(400).json({ message: "Discord username already exists." });
 
 	const hashed = await bcrypt.hash(password, 10);
-	const newUser = new User({ kickUsername, rainbetUsername, password: hashed });
+	const newUser = new User({
+		twitchUsername,
+		discordUsername,
+		csgoName,
+		password: hashed,
+	});
 	await newUser.save();
 
-	res.status(201).json({ message: "User registered." });
+	res.status(201).json({
+		message: "User registered.",
+		user: {
+			id: newUser._id,
+			twitchUsername: newUser.twitchUsername,
+			discordUsername: newUser.discordUsername,
+			csgoName: newUser.csgoName,
+			kickUsername: newUser.csgoName,
+			rainbetUsername: newUser.twitchUsername,
+			role: newUser.role,
+		},
+	});
 };
 
 exports.login = async (req, res) => {
-	const { kickUsername, password } = req.body;
+	const { csgoName, password } = req.body;
 
-	const user = await User.findOne({ kickUsername });
+	if (!csgoName || !password) {
+		return res.status(400).json({ message: "CSGO name and password are required." });
+	}
+
+	const user = await User.findOne({ csgoName });
 	if (!user) return res.status(404).json({ message: "User not found." });
 
 	const match = await bcrypt.compare(password, user.password);
@@ -44,8 +77,11 @@ exports.login = async (req, res) => {
 		token,
 		user: {
 			id: user._id,
-			kickUsername: user.kickUsername,
-			rainbetUsername: user.rainbetUsername, // <-- add this here
+			twitchUsername: user.twitchUsername,
+			discordUsername: user.discordUsername,
+			csgoName: user.csgoName,
+			kickUsername: user.csgoName,
+			rainbetUsername: user.twitchUsername,
 			role: user.role,
 		},
 	});
