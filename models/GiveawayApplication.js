@@ -13,7 +13,8 @@ const giveawayApplicationSchema = new mongoose.Schema({
 	},
 	name: { type: String, required: true },
 	discordName: { type: String, required: true },
-	depositProofImage: { type: String, required: true },
+	depositProofVideo: { type: String, required: true },
+	depositAmount: { type: Number, required: true, min: 0 },
 	status: {
 		type: String,
 		enum: ["pending", "approved", "rejected"],

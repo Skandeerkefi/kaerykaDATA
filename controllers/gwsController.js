@@ -18,10 +18,26 @@ const getCurrentUserIdFromRequest = (req) => {
 };
 
 exports.createGWS = async (req, res) => {
-	const { title, imageUrl, endTime, maxPlayers, depositRequirement } = req.body;
+	const {
+		title,
+		imageUrl,
+		endTime,
+		maxPlayers,
+		depositRequirement,
+		winnerSelectionType,
+	} = req.body;
 
 	if (!title || !imageUrl || !endTime || !maxPlayers || !depositRequirement) {
 		return res.status(400).json({ message: "All giveaway fields are required." });
+	}
+
+	if (
+		winnerSelectionType &&
+		!["random", "highest_deposit"].includes(winnerSelectionType)
+	) {
+		return res.status(400).json({
+			message: "winnerSelectionType must be random or highest_deposit.",
+		});
 	}
 
 	try {
@@ -31,6 +47,7 @@ exports.createGWS = async (req, res) => {
 			endTime,
 			maxPlayers,
 			depositRequirement,
+			winnerSelectionType: winnerSelectionType || "random",
 			state: "active",
 		});
 		await gws.save();
@@ -46,12 +63,20 @@ exports.submitApplication = async (req, res) => {
 		name,
 		csgoName,
 		discordName,
-		depositProofImage,
+		depositProofVideo,
+		depositAmount,
 	} = req.body;
 	const userId = req.user.id;
 	const applicationName = csgoName || name;
+	const parsedDepositAmount = Number(depositAmount);
 
-	if (!applicationName || !discordName || !depositProofImage) {
+	if (
+		!applicationName ||
+		!discordName ||
+		!depositProofVideo ||
+		!Number.isFinite(parsedDepositAmount) ||
+		parsedDepositAmount < 0
+	) {
 		return res.status(400).json({ message: "All application fields are required." });
 	}
 
@@ -67,7 +92,8 @@ exports.submitApplication = async (req, res) => {
 			user: userId,
 			name: applicationName,
 			discordName,
-			depositProofImage,
+			depositProofVideo,
+			depositAmount: parsedDepositAmount,
 			status: "pending",
 		},
 		{ new: true, upsert: true, setDefaultsOnInsert: true }
@@ -217,6 +243,34 @@ exports.updateGWS = async (req, res) => {
 		res.status(500).json({ error: "Failed to update GWS" });
 	}
 };
+
+const selectGiveawayWinner = async (gws) => {
+	if (!gws.participants || gws.participants.length === 0) {
+		return null;
+	}
+	const participantIds = gws.participants.map(
+		(participant) => participant?._id || participant
+	);
+
+	if (gws.winnerSelectionType === "highest_deposit") {
+		const highestDepositApplication = await GiveawayApplication.findOne({
+			giveaway: gws._id,
+			status: "approved",
+			user: { $in: participantIds },
+		})
+			.sort({ depositAmount: -1, createdAt: 1 })
+			.select("user");
+
+		if (highestDepositApplication?.user) {
+			return highestDepositApplication.user;
+		}
+	}
+
+	const randomIndex = Math.floor(Math.random() * gws.participants.length);
+	const participant = gws.participants[randomIndex];
+	return participant?._id || participant;
+};
+
 exports.drawWinner = async (req, res) => {
 	try {
 		const gws = await GWS.findById(req.params.id).populate("participants", "csgoName");
@@ -224,15 +278,26 @@ exports.drawWinner = async (req, res) => {
 			return res.status(400).json({ message: "No participants to draw from." });
 		}
 
-		const randomIndex = Math.floor(Math.random() * gws.participants.length);
-		const winner = gws.participants[randomIndex];
+		const selectedWinnerId = await selectGiveawayWinner(gws);
+		if (!selectedWinnerId) {
+			return res.status(400).json({ message: "No eligible winner found." });
+		}
+		const winner = gws.participants.find(
+			(participant) => participant._id.toString() === selectedWinnerId.toString()
+		);
+		if (!winner) {
+			return res.status(400).json({ message: "No eligible winner found." });
+		}
 
 		gws.winner = winner._id;
 		gws.state = "complete";
 		await gws.save();
 
 		res.json({
-			message: "Winner selected",
+			message:
+				gws.winnerSelectionType === "highest_deposit"
+					? "Winner selected by highest deposit"
+					: "Winner selected randomly",
 			winner: { id: winner._id, csgoName: winner.csgoName },
 			gws,
 		});
@@ -291,8 +356,12 @@ exports.drawWinnerAuto = async (gws) => {
 		return;
 	}
 
-	const randomIndex = Math.floor(Math.random() * gws.participants.length);
-	const winner = gws.participants[randomIndex];
+	const winner = await selectGiveawayWinner(gws);
+	if (!winner) {
+		gws.state = "complete";
+		await gws.save();
+		return;
+	}
 
 	gws.winner = winner;
 	gws.state = "complete"; // IMPORTANT: set state to complete here

@@ -7,6 +7,11 @@ const gwsSchema = new mongoose.Schema({
 	endTime: { type: Date, required: true },
 	maxPlayers: { type: Number, required: true },
 	depositRequirement: { type: String, required: true },
+	winnerSelectionType: {
+		type: String,
+		enum: ["random", "highest_deposit"],
+		default: "random",
+	},
 	totalEntries: { type: Number, default: 0 },
 	winner: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
 	state: {
